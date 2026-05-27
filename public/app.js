@@ -930,6 +930,7 @@ function compareCell(myValue, fpValue, digits = 1) {
 async function renderCompareProjections() {
   const selected = state.compareTeam || state.selectedTeam || data.teams[0]?.abb;
   state.compareTeam = selected;
+  const selectedPos = state.comparePosition || "All";
   appFrame(`<main class="screen"><div class="panel"><div class="panel-head"><h1>Compare Projections</h1><button class="secondary" id="backToWizard">Back to Wizard</button></div><div class="panel-body"><div class="loading">Loading FantasyPros projections...</div></div></div></main>`);
   document.getElementById("backToWizard").onclick = render;
   try {
@@ -951,6 +952,7 @@ async function renderCompareProjections() {
       const fp = fpMap.get(key);
       const name = mine?.name || fp?.player || "-";
       const pos = mine?.pos || fp?.pos || depthChartPosition(selected, name) || "-";
+      if (selectedPos !== "All" && pos !== selectedPos) return "";
       const myStats = myCompareStats(mine);
       const fpStats = fpCompareStats(fp);
       return `<tr>
@@ -968,9 +970,13 @@ async function renderCompareProjections() {
       </tr>`;
     })
     .join("");
+  const positionOptions = ["All", "QB", "RB", "WR", "TE"]
+    .map((pos) => `<option value="${pos}" ${selectedPos === pos ? "selected" : ""}>${pos}</option>`)
+    .join("");
 
   appFrame(`<main class="screen"><div class="panel"><div class="panel-head"><h1>Compare Projections</h1><span class="metric-pill">FantasyPros</span></div><div class="panel-body">
     <div class="compare-teams">${teamButtons}</div>
+    <div class="compare-controls"><label>Position</label><select id="comparePosition">${positionOptions}</select></div>
     <div class="reference-title"><h3>${selected} Comparison</h3><span class="mini">Difference is your projection minus FantasyPros. Source: fantasypros.com</span></div>
     <div class="table-wrap compare-table"><table><thead><tr>
       <th class="player-cell">Player</th><th>Team</th><th>Pos</th>
@@ -990,6 +996,10 @@ async function renderCompareProjections() {
       renderCompareProjections();
     };
   });
+  document.getElementById("comparePosition").onchange = (event) => {
+    state.comparePosition = event.target.value;
+    renderCompareProjections();
+  };
 }
 
 function renderLeaderboard() {

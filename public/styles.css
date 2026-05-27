@@ -465,6 +465,25 @@ th {
   margin-bottom: 16px;
 }
 
+.compare-controls {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-bottom: 14px;
+}
+
+.compare-controls label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.compare-controls select {
+  max-width: 140px;
+}
+
 .team-chip {
   background: #eef2f7;
   color: var(--ink);
