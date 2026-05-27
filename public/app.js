@@ -92,6 +92,7 @@ const teamColors = {
 
 let data = null;
 let depth = null;
+let fantasyPros = null;
 let state = loadState();
 
 function loadState() {
@@ -278,6 +279,15 @@ function selectedProjectionPlayers(abb = state.selectedTeam) {
   return [...ids].map((id) => ts.players[id]).filter(Boolean);
 }
 
+function depthChartPosition(team, name) {
+  const chart = depth?.charts?.[team]?.positions || {};
+  const key = normalizeName(name);
+  for (const pos of ["QB", "RB", "WR", "TE"]) {
+    if ((chart[pos] || []).some((player) => player.historyKey === key || normalizeName(player.name) === key)) return pos;
+  }
+  return "";
+}
+
 function leagueMin(category) {
   if (!state.leagueMins) state.leagueMins = {};
   return Number(state.leagueMins[category] ?? leagueAverageDefaults[category] ?? 0);
@@ -448,6 +458,7 @@ function appFrame(content) {
         <div>
           <button class="secondary" id="teamSelectBtn">Teams</button>
           <button class="ghost" id="leaderBtn">Leaderboard</button>
+          <button class="ghost" id="compareBtn">Compare</button>
           <button class="ghost" id="exportBtn">Export</button>
           <button class="ghost" id="importBtn">Import</button>
           <input id="importFile" type="file" accept="application/json,.json" hidden />
@@ -462,6 +473,7 @@ function appFrame(content) {
     render();
   };
   document.getElementById("leaderBtn").onclick = () => renderLeaderboard();
+  document.getElementById("compareBtn").onclick = () => renderCompareProjections();
   document.getElementById("exportBtn").onclick = exportProgress;
   document.getElementById("importBtn").onclick = () => document.getElementById("importFile").click();
   document.getElementById("importFile").onchange = (event) => importProgress(event.target.files?.[0]);
@@ -829,6 +841,155 @@ function renderFinal() {
 function allPlayers() {
   recalc();
   return Object.keys(state.teams).flatMap((abb) => selectedProjectionPlayers(abb));
+}
+
+async function loadFantasyPros() {
+  if (fantasyPros) return fantasyPros;
+  const res = await fetch("/api/fantasypros-projections");
+  const json = await res.json();
+  if (json.error) throw new Error(json.error);
+  fantasyPros = json;
+  return fantasyPros;
+}
+
+function fantasyProsPlayerMap(team) {
+  const map = new Map();
+  (fantasyPros?.players || [])
+    .filter((player) => player.team === team)
+    .forEach((player) => map.set(normalizeName(player.player), player));
+  return map;
+}
+
+function myPlayerMap(team) {
+  const map = new Map();
+  selectedProjectionPlayers(team).forEach((player) => map.set(normalizeName(player.name), player));
+  return map;
+}
+
+function myCompareStats(player) {
+  if (!player) {
+    return {
+      fantasyPoints: 0,
+      passYds: 0,
+      passTd: 0,
+      rushYds: 0,
+      rushTd: 0,
+      rec: 0,
+      recYds: 0,
+      recTd: 0,
+    };
+  }
+  return {
+    fantasyPoints: player.fantasyPoints || 0,
+    passYds: player.passing?.yards || 0,
+    passTd: player.passing?.td || 0,
+    rushYds: player.rushing?.yards || 0,
+    rushTd: player.rushing?.td || 0,
+    rec: player.receiving?.receptions || 0,
+    recYds: player.receiving?.yards || 0,
+    recTd: player.receiving?.td || 0,
+  };
+}
+
+function fpCompareStats(player) {
+  if (!player) {
+    return {
+      fantasyPoints: 0,
+      passYds: 0,
+      passTd: 0,
+      rushYds: 0,
+      rushTd: 0,
+      rec: 0,
+      recYds: 0,
+      recTd: 0,
+    };
+  }
+  return {
+    fantasyPoints: player.fantasyPoints || 0,
+    passYds: player.passYds || 0,
+    passTd: player.passTd || 0,
+    rushYds: player.rushYds || 0,
+    rushTd: player.rushTd || 0,
+    rec: player.rec || 0,
+    recYds: player.recYds || 0,
+    recTd: player.recTd || 0,
+  };
+}
+
+function diffClass(value) {
+  if (value > 0.05) return "diff-pos";
+  if (value < -0.05) return "diff-neg";
+  return "";
+}
+
+function compareCell(myValue, fpValue, digits = 1) {
+  const diff = myValue - fpValue;
+  return `<td>${fmt(myValue, digits)}</td><td>${fmt(fpValue, digits)}</td><td class="${diffClass(diff)}">${diff > 0 ? "+" : ""}${fmt(diff, digits)}</td>`;
+}
+
+async function renderCompareProjections() {
+  const selected = state.compareTeam || state.selectedTeam || data.teams[0]?.abb;
+  state.compareTeam = selected;
+  appFrame(`<main class="screen"><div class="panel"><div class="panel-head"><h1>Compare Projections</h1><button class="secondary" id="backToWizard">Back to Wizard</button></div><div class="panel-body"><div class="loading">Loading FantasyPros projections...</div></div></div></main>`);
+  document.getElementById("backToWizard").onclick = render;
+  try {
+    await loadFantasyPros();
+  } catch (error) {
+    document.querySelector(".panel-body").innerHTML = `<div class="empty">Unable to load FantasyPros projections: ${error.message}</div>`;
+    return;
+  }
+
+  const teamButtons = data.teams
+    .map((team) => `<button class="team-chip ${team.abb === selected ? "active" : ""}" data-compare-team="${team.abb}">${team.abb}</button>`)
+    .join("");
+  const myMap = myPlayerMap(selected);
+  const fpMap = fantasyProsPlayerMap(selected);
+  const keys = [...new Set([...myMap.keys(), ...fpMap.keys()])];
+  const rows = keys
+    .map((key) => {
+      const mine = myMap.get(key);
+      const fp = fpMap.get(key);
+      const name = mine?.name || fp?.player || "-";
+      const pos = mine?.pos || fp?.pos || depthChartPosition(selected, name) || "-";
+      const myStats = myCompareStats(mine);
+      const fpStats = fpCompareStats(fp);
+      return `<tr>
+        <td class="player-cell">${name}</td>
+        <td>${selected}</td>
+        <td>${pos}</td>
+        ${compareCell(myStats.fantasyPoints, fpStats.fantasyPoints, 1)}
+        ${compareCell(myStats.passYds, fpStats.passYds, 1)}
+        ${compareCell(myStats.passTd, fpStats.passTd, 1)}
+        ${compareCell(myStats.rushYds, fpStats.rushYds, 1)}
+        ${compareCell(myStats.rushTd, fpStats.rushTd, 1)}
+        ${compareCell(myStats.rec, fpStats.rec, 1)}
+        ${compareCell(myStats.recYds, fpStats.recYds, 1)}
+        ${compareCell(myStats.recTd, fpStats.recTd, 1)}
+      </tr>`;
+    })
+    .join("");
+
+  appFrame(`<main class="screen"><div class="panel"><div class="panel-head"><h1>Compare Projections</h1><span class="metric-pill">FantasyPros</span></div><div class="panel-body">
+    <div class="compare-teams">${teamButtons}</div>
+    <div class="reference-title"><h3>${selected} Comparison</h3><span class="mini">Difference is your projection minus FantasyPros. Source: fantasypros.com</span></div>
+    <div class="table-wrap compare-table"><table><thead><tr>
+      <th class="player-cell">Player</th><th>Team</th><th>Pos</th>
+      <th>My FPts</th><th>FP FPts</th><th>Diff</th>
+      <th>My Pass Yds</th><th>FP Pass Yds</th><th>Diff</th>
+      <th>My Pass TD</th><th>FP Pass TD</th><th>Diff</th>
+      <th>My Rush Yds</th><th>FP Rush Yds</th><th>Diff</th>
+      <th>My Rush TD</th><th>FP Rush TD</th><th>Diff</th>
+      <th>My Rec</th><th>FP Rec</th><th>Diff</th>
+      <th>My Rec Yds</th><th>FP Rec Yds</th><th>Diff</th>
+      <th>My Rec TD</th><th>FP Rec TD</th><th>Diff</th>
+    </tr></thead><tbody>${rows || `<tr><td colspan="24" class="empty">No players found for this team yet.</td></tr>`}</tbody></table></div>
+  </div></div></main>`);
+  document.querySelectorAll("[data-compare-team]").forEach((button) => {
+    button.onclick = () => {
+      state.compareTeam = button.dataset.compareTeam;
+      renderCompareProjections();
+    };
+  });
 }
 
 function renderLeaderboard() {

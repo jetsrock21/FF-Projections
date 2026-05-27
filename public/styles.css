@@ -458,6 +458,40 @@ th {
   margin-bottom: 14px;
 }
 
+.compare-teams {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 16px;
+}
+
+.team-chip {
+  background: #eef2f7;
+  color: var(--ink);
+  font-size: 12px;
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+.team-chip.active {
+  background: var(--team-primary);
+  color: white;
+}
+
+.compare-table table {
+  min-width: 1900px;
+}
+
+.diff-pos {
+  color: #047857;
+  font-weight: 800;
+}
+
+.diff-neg {
+  color: #b91c1c;
+  font-weight: 800;
+}
+
 .summary-band {
   background: linear-gradient(135deg, var(--team-primary), #172033);
   color: white;
