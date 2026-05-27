@@ -945,7 +945,7 @@ async function renderCompareProjections() {
     .join("");
   const myMap = myPlayerMap(selected);
   const fpMap = fantasyProsPlayerMap(selected);
-  const keys = [...new Set([...myMap.keys(), ...fpMap.keys()])];
+  const keys = [...myMap.keys()];
   const rows = keys
     .map((key) => {
       const mine = myMap.get(key);
@@ -988,7 +988,7 @@ async function renderCompareProjections() {
       <th>My Rec</th><th>FP Rec</th><th>Diff</th>
       <th>My Rec Yds</th><th>FP Rec Yds</th><th>Diff</th>
       <th>My Rec TD</th><th>FP Rec TD</th><th>Diff</th>
-    </tr></thead><tbody>${rows || `<tr><td colspan="24" class="empty">No players found for this team yet.</td></tr>`}</tbody></table></div>
+    </tr></thead><tbody>${rows || `<tr><td colspan="24" class="empty">No projected players found for this team yet. Add players in the projection builder first.</td></tr>`}</tbody></table></div>
   </div></div></main>`);
   document.querySelectorAll("[data-compare-team]").forEach((button) => {
     button.onclick = () => {
