@@ -1017,6 +1017,28 @@ function compareCell(myValue, fpValue, digits = 1) {
   return `<td>${fmt(myValue, digits)}</td><td>${fmt(fpValue, digits)}</td><td class="${diffClass(diff)}">${diff > 0 ? "+" : ""}${fmt(diff, digits)}</td>`;
 }
 
+function compareColumns(positionFilter) {
+  const showPassing = !["RB", "WR", "TE"].includes(positionFilter);
+  const passing = [
+    { key: "passYds", label: "Pass Yds" },
+    { key: "passTd", label: "Pass TD" },
+  ];
+  const rushing = [
+    { key: "rushYds", label: "Rush Yds" },
+    { key: "rushTd", label: "Rush TD" },
+  ];
+  const receiving = [
+    { key: "rec", label: "Rec" },
+    { key: "recYds", label: "Rec Yds" },
+    { key: "recTd", label: "Rec TD" },
+  ];
+  return [
+    { key: "fantasyPoints", label: "FPts" },
+    ...(showPassing ? passing : []),
+    ...(["WR", "TE"].includes(positionFilter) ? [...receiving, ...rushing] : [...rushing, ...receiving]),
+  ];
+}
+
 async function renderCompareProjections() {
   const selected = state.compareTeam || state.selectedTeam || data.teams[0]?.abb;
   state.compareTeam = selected;
@@ -1036,6 +1058,7 @@ async function renderCompareProjections() {
   const myMap = myPlayerMap(selected);
   const fpMap = fantasyProsPlayerMap(selected);
   const keys = [...myMap.keys()];
+  const columns = compareColumns(selectedPos);
   const missingValuable = [...fpMap.entries()]
     .filter(([key, player]) => !myMap.has(key))
     .filter(([, player]) => (selectedPos === "All" || player.pos === selectedPos))
@@ -1054,14 +1077,7 @@ async function renderCompareProjections() {
         <td class="player-cell">${name}</td>
         <td>${selected}</td>
         <td>${pos}</td>
-        ${compareCell(myStats.fantasyPoints, fpStats.fantasyPoints, 1)}
-        ${compareCell(myStats.passYds, fpStats.passYds, 1)}
-        ${compareCell(myStats.passTd, fpStats.passTd, 1)}
-        ${compareCell(myStats.rushYds, fpStats.rushYds, 1)}
-        ${compareCell(myStats.rushTd, fpStats.rushTd, 1)}
-        ${compareCell(myStats.rec, fpStats.rec, 1)}
-        ${compareCell(myStats.recYds, fpStats.recYds, 1)}
-        ${compareCell(myStats.recTd, fpStats.recTd, 1)}
+        ${columns.map((col) => compareCell(myStats[col.key], fpStats[col.key], 1)).join("")}
       </tr>`;
     })
     .join("");
@@ -1094,15 +1110,8 @@ async function renderCompareProjections() {
     <div class="reference-title"><h3>${selected} Comparison</h3><span class="mini">Difference is your projection minus FantasyPros. Source: fantasypros.com</span></div>
     <div class="table-wrap compare-table"><table><thead><tr>
       <th class="player-cell">Player</th><th>Team</th><th>Pos</th>
-      <th>My FPts</th><th>FP FPts</th><th>Diff</th>
-      <th>My Pass Yds</th><th>FP Pass Yds</th><th>Diff</th>
-      <th>My Pass TD</th><th>FP Pass TD</th><th>Diff</th>
-      <th>My Rush Yds</th><th>FP Rush Yds</th><th>Diff</th>
-      <th>My Rush TD</th><th>FP Rush TD</th><th>Diff</th>
-      <th>My Rec</th><th>FP Rec</th><th>Diff</th>
-      <th>My Rec Yds</th><th>FP Rec Yds</th><th>Diff</th>
-      <th>My Rec TD</th><th>FP Rec TD</th><th>Diff</th>
-    </tr></thead><tbody>${rows || `<tr><td colspan="24" class="empty">No projected players found for this team yet. Add players in the projection builder first.</td></tr>`}</tbody></table></div>
+      ${columns.map((col) => `<th>My ${col.label}</th><th>FP ${col.label}</th><th>Diff</th>`).join("")}
+    </tr></thead><tbody>${rows || `<tr><td colspan="${3 + columns.length * 3}" class="empty">No projected players found for this team yet. Add players in the projection builder first.</td></tr>`}</tbody></table></div>
     <div class="reference-title missing-title"><h3>Missing Valuable Players</h3><span class="mini">FantasyPros players not in your projections. Thresholds: QB 150+ FPTS, RB/WR/TE 80+ FPTS.</span></div>
     <div class="table-wrap"><table><thead><tr>
       <th class="player-cell">Player</th><th>Team</th><th>Pos</th><th>FP FPTS</th><th>Threshold</th>
