@@ -53,6 +53,24 @@ button.ghost {
   color: var(--team-primary);
 }
 
+.round-toggle {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 800;
+  gap: 6px;
+  margin: 0 8px;
+  text-transform: uppercase;
+}
+
+.round-toggle input {
+  accent-color: var(--team-primary);
+  min-height: auto;
+  padding: 0;
+  width: auto;
+}
+
 button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
@@ -288,6 +306,22 @@ th {
   text-transform: uppercase;
 }
 
+.sort-header {
+  background: transparent;
+  color: inherit;
+  font-size: 11px;
+  min-height: auto;
+  padding: 0;
+  text-align: inherit;
+  text-transform: uppercase;
+  width: 100%;
+}
+
+.sort-header.active,
+.sort-header:hover {
+  color: var(--team-primary);
+}
+
 .input-grid {
   display: grid;
   gap: 14px;
@@ -454,8 +488,18 @@ th {
 .leader-filters {
   display: grid;
   gap: 10px;
-  grid-template-columns: 1fr 160px 180px 180px;
+  grid-template-columns: 1fr 160px 180px 180px auto;
   margin-bottom: 14px;
+}
+
+.leaderboard-round {
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  justify-content: center;
+  margin: 0;
+  min-height: 38px;
+  padding: 0 10px;
 }
 
 .compare-teams {
@@ -499,6 +543,10 @@ th {
 
 .compare-table table {
   min-width: 1900px;
+}
+
+.missing-title {
+  margin-top: 22px;
 }
 
 .diff-pos {

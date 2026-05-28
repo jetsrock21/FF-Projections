@@ -143,6 +143,7 @@ function importProgress(file) {
         teamStage: Number(importedState.teamStage) || 0,
         metricStage: importedState.metricStage || {},
         leagueMins: importedState.leagueMins || {},
+        leaderboardRoundNumbers: Boolean(importedState.leaderboardRoundNumbers ?? importedState.roundNumbers),
         filters: importedState.filters || { search: "", team: "All", pos: "All", min: "" },
         teams: importedState.teams || {},
       };
@@ -158,6 +159,10 @@ function importProgress(file) {
 function fmt(value, digits = 0) {
   if (value === null || value === undefined || Number.isNaN(value)) return "-";
   return Number(value).toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: digits });
+}
+
+function fmtLeaderboard(value, digits = 1) {
+  return fmt(value, state.leaderboardRoundNumbers ? 0 : digits);
 }
 
 function fmtPct(value) {
@@ -814,26 +819,111 @@ function renderFumbles() {
   });
 }
 
-function projectionRows(players, includeRank = false) {
+function playerStat(player, key) {
+  const stats = {
+    rank: 0,
+    name: player.name || "",
+    team: player.team || "",
+    pos: player.pos || "",
+    fantasyPoints: player.fantasyPoints || 0,
+    passAtt: player.passing?.attempts || 0,
+    passYds: player.passing?.yards || 0,
+    passTd: player.passing?.td || 0,
+    int: player.passing?.int || 0,
+    rushAtt: player.rushing?.attempts || 0,
+    rushYds: player.rushing?.yards || 0,
+    rushTd: player.rushing?.td || 0,
+    targets: player.receiving?.targets || 0,
+    rec: player.receiving?.receptions || 0,
+    recYds: player.receiving?.yards || 0,
+    recTd: player.receiving?.td || 0,
+    fumbles: player.fumbles?.fumbles || 0,
+  };
+  return stats[key];
+}
+
+function sortPlayers(players, sortConfig = { key: "fantasyPoints", dir: "desc" }) {
+  return [...players].sort((a, b) => {
+    const aValue = playerStat(a, sortConfig.key);
+    const bValue = playerStat(b, sortConfig.key);
+    if (typeof aValue === "string" || typeof bValue === "string") {
+      return sortConfig.dir === "asc"
+        ? String(aValue).localeCompare(String(bValue))
+        : String(bValue).localeCompare(String(aValue));
+    }
+    return sortConfig.dir === "asc" ? aValue - bValue : bValue - aValue;
+  });
+}
+
+function projectionRows(players, columns) {
   return players
-    .sort((a, b) => (b.fantasyPoints || 0) - (a.fantasyPoints || 0))
-    .map((p, i) => `<tr>
-      ${includeRank ? `<td>${i + 1}</td>` : ""}<td class="player-cell">${p.name}</td><td>${p.team}</td><td>${p.pos}</td><td>${fmt(p.fantasyPoints, 1)}</td>
-      <td>${fmt(p.passing?.attempts, 1)}</td><td>${fmt(p.passing?.yards, 1)}</td><td>${fmt(p.passing?.td, 1)}</td><td>${fmt(p.passing?.int, 1)}</td>
-      <td>${fmt(p.rushing?.attempts, 1)}</td><td>${fmt(p.rushing?.yards, 1)}</td><td>${fmt(p.rushing?.td, 1)}</td>
-      <td>${fmt(p.receiving?.targets, 1)}</td><td>${fmt(p.receiving?.receptions, 1)}</td><td>${fmt(p.receiving?.yards, 1)}</td><td>${fmt(p.receiving?.td, 1)}</td>
-      <td>${fmt(p.fumbles?.fumbles, 1)}</td>
-    </tr>`)
+    .map(
+      (p, i) => `<tr>${columns
+        .map((col) => {
+          if (col.key === "rank") return `<td>${i + 1}</td>`;
+          if (col.key === "name") return `<td class="player-cell">${p.name}</td>`;
+          if (col.key === "team") return `<td>${p.team}</td>`;
+          if (col.key === "pos") return `<td>${p.pos}</td>`;
+          return `<td>${fmtLeaderboard(playerStat(p, col.key), 1)}</td>`;
+        })
+        .join("")}</tr>`,
+    )
     .join("");
 }
 
-function finalTable(players, includeRank = false) {
-  return `<div class="table-wrap"><table><thead><tr>${includeRank ? "<th>Rank</th>" : ""}<th class="player-cell">Player</th><th>Team</th><th>Pos</th><th>Fantasy</th><th>Pass Att</th><th>Pass Yds</th><th>Pass TD</th><th>INT</th><th>Rush Att</th><th>Rush Yds</th><th>Rush TD</th><th>Targets</th><th>Rec</th><th>Rec Yds</th><th>Rec TD</th><th>Fumbles</th></tr></thead><tbody>${projectionRows(players, includeRank)}</tbody></table></div>`;
+function finalTable(players, options = {}) {
+  const positionFilter = options.positionFilter || "All";
+  const sortable = Boolean(options.sortable);
+  const sortConfig = options.sortConfig || { key: "fantasyPoints", dir: "desc" };
+  const showPassing = !["RB", "WR", "TE"].includes(positionFilter);
+  const rushingColumns = [
+    { key: "rushAtt", label: "Rush Att" },
+    { key: "rushYds", label: "Rush Yds" },
+    { key: "rushTd", label: "Rush TD" },
+  ];
+  const receivingColumns = [
+    { key: "targets", label: "Targets" },
+    { key: "rec", label: "Rec" },
+    { key: "recYds", label: "Rec Yds" },
+    { key: "recTd", label: "Rec TD" },
+  ];
+  const skillColumns = ["WR", "TE"].includes(positionFilter)
+    ? [...receivingColumns, ...rushingColumns]
+    : [...rushingColumns, ...receivingColumns];
+  const columns = [
+    { key: "rank", label: "Rank" },
+    { key: "name", label: "Player" },
+    { key: "team", label: "Team" },
+    { key: "pos", label: "Pos" },
+    { key: "fantasyPoints", label: "Fantasy" },
+    ...(showPassing
+      ? [
+          { key: "passAtt", label: "Pass Att" },
+          { key: "passYds", label: "Pass Yds" },
+          { key: "passTd", label: "Pass TD" },
+          { key: "int", label: "INT" },
+        ]
+      : []),
+    ...skillColumns,
+    { key: "fumbles", label: "Fumbles" },
+  ];
+  const sorted = sortPlayers(players, sortConfig);
+  const headers = columns
+    .map((col) => {
+      const active = sortConfig.key === col.key;
+      const arrow = active ? (sortConfig.dir === "asc" ? " ▲" : " ▼") : "";
+      const cls = col.key === "name" ? "player-cell" : "";
+      return sortable
+        ? `<th class="${cls}"><button class="sort-header ${active ? "active" : ""}" data-sort-key="${col.key}">${col.label}${arrow}</button></th>`
+        : `<th class="${cls}">${col.label}</th>`;
+    })
+    .join("");
+  return `<div class="table-wrap"><table><thead><tr>${headers}</tr></thead><tbody>${projectionRows(sorted, columns)}</tbody></table></div>`;
 }
 
 function renderFinal() {
   const players = selectedProjectionPlayers();
-  document.getElementById("wizardPanel").innerHTML = `<div class="panel"><div class="panel-head"><h1>Final Projection</h1><button id="openLeaderboard">Player Leaderboard</button></div><div class="panel-body">${finalTable(players, true)}${navButtons("Back", "Leaderboard")}</div></div>`;
+  document.getElementById("wizardPanel").innerHTML = `<div class="panel"><div class="panel-head"><h1>Final Projection</h1><button id="openLeaderboard">Player Leaderboard</button></div><div class="panel-body">${finalTable(players)}${navButtons("Back", "Leaderboard")}</div></div>`;
   document.getElementById("openLeaderboard").onclick = renderLeaderboard;
   bindNav(() => renderLeaderboard());
 }
@@ -946,6 +1036,11 @@ async function renderCompareProjections() {
   const myMap = myPlayerMap(selected);
   const fpMap = fantasyProsPlayerMap(selected);
   const keys = [...myMap.keys()];
+  const missingValuable = [...fpMap.entries()]
+    .filter(([key, player]) => !myMap.has(key))
+    .filter(([, player]) => (selectedPos === "All" || player.pos === selectedPos))
+    .filter(([, player]) => (player.pos === "QB" ? player.fantasyPoints >= 150 : player.fantasyPoints >= 80))
+    .sort((a, b) => (b[1].fantasyPoints || 0) - (a[1].fantasyPoints || 0));
   const rows = keys
     .map((key) => {
       const mine = myMap.get(key);
@@ -970,6 +1065,25 @@ async function renderCompareProjections() {
       </tr>`;
     })
     .join("");
+  const missingRows = missingValuable
+    .map(([, player]) => {
+      const threshold = player.pos === "QB" ? 150 : 80;
+      return `<tr>
+        <td class="player-cell">${player.player}</td>
+        <td>${player.team}</td>
+        <td>${player.pos}</td>
+        <td>${fmt(player.fantasyPoints, 1)}</td>
+        <td>${fmt(threshold, 0)}</td>
+        <td>${fmt(player.passYds, 1)}</td>
+        <td>${fmt(player.passTd, 1)}</td>
+        <td>${fmt(player.rushYds, 1)}</td>
+        <td>${fmt(player.rushTd, 1)}</td>
+        <td>${fmt(player.rec, 1)}</td>
+        <td>${fmt(player.recYds, 1)}</td>
+        <td>${fmt(player.recTd, 1)}</td>
+      </tr>`;
+    })
+    .join("");
   const positionOptions = ["All", "QB", "RB", "WR", "TE"]
     .map((pos) => `<option value="${pos}" ${selectedPos === pos ? "selected" : ""}>${pos}</option>`)
     .join("");
@@ -989,6 +1103,11 @@ async function renderCompareProjections() {
       <th>My Rec Yds</th><th>FP Rec Yds</th><th>Diff</th>
       <th>My Rec TD</th><th>FP Rec TD</th><th>Diff</th>
     </tr></thead><tbody>${rows || `<tr><td colspan="24" class="empty">No projected players found for this team yet. Add players in the projection builder first.</td></tr>`}</tbody></table></div>
+    <div class="reference-title missing-title"><h3>Missing Valuable Players</h3><span class="mini">FantasyPros players not in your projections. Thresholds: QB 150+ FPTS, RB/WR/TE 80+ FPTS.</span></div>
+    <div class="table-wrap"><table><thead><tr>
+      <th class="player-cell">Player</th><th>Team</th><th>Pos</th><th>FP FPTS</th><th>Threshold</th>
+      <th>Pass Yds</th><th>Pass TD</th><th>Rush Yds</th><th>Rush TD</th><th>Rec</th><th>Rec Yds</th><th>Rec TD</th>
+    </tr></thead><tbody>${missingRows || `<tr><td colspan="12" class="empty">No valuable missing players for this team/filter.</td></tr>`}</tbody></table></div>
   </div></div></main>`);
   document.querySelectorAll("[data-compare-team]").forEach((button) => {
     button.onclick = () => {
@@ -1011,13 +1130,32 @@ function renderLeaderboard() {
   if (filters.pos && filters.pos !== "All") players = players.filter((p) => p.pos === filters.pos);
   if (filters.search) players = players.filter((p) => p.name.toLowerCase().includes(filters.search.toLowerCase()));
   if (filters.min !== "") players = players.filter((p) => (p.fantasyPoints || 0) >= Number(filters.min));
+  const sortConfig = state.leaderboardSort || { key: "fantasyPoints", dir: "desc" };
   appFrame(`<main class="screen"><div class="panel"><div class="panel-head"><h1>Player Leaderboard</h1><button class="secondary" id="backToWizard">Back to Wizard</button></div><div class="panel-body">
     <div class="leader-filters"><input id="filterSearch" placeholder="Player search" value="${filters.search || ""}" />
       <select id="filterTeam">${teams.map((t) => `<option ${filters.team === t ? "selected" : ""}>${t}</option>`).join("")}</select>
       <select id="filterPos">${positions.map((p) => `<option ${filters.pos === p ? "selected" : ""}>${p}</option>`).join("")}</select>
-      <input id="filterMin" type="number" placeholder="Minimum fantasy points" value="${filters.min || ""}" /></div>
-    ${finalTable(players, true)}</div></div></main>`);
+      <input id="filterMin" type="number" placeholder="Minimum fantasy points" value="${filters.min || ""}" />
+      <label class="round-toggle leaderboard-round"><input id="leaderboardRoundNumbers" type="checkbox" ${state.leaderboardRoundNumbers ? "checked" : ""} /> Round</label></div>
+    ${finalTable(players, { sortable: true, sortConfig, positionFilter: filters.pos })}</div></div></main>`);
   document.getElementById("backToWizard").onclick = render;
+  document.getElementById("leaderboardRoundNumbers").onchange = (event) => {
+    state.leaderboardRoundNumbers = event.target.checked;
+    saveState();
+    renderLeaderboard();
+  };
+  document.querySelectorAll("[data-sort-key]").forEach((button) => {
+    button.onclick = () => {
+      const key = button.dataset.sortKey;
+      const current = state.leaderboardSort || { key: "fantasyPoints", dir: "desc" };
+      state.leaderboardSort = {
+        key,
+        dir: current.key === key && current.dir === "desc" ? "asc" : "desc",
+      };
+      saveState();
+      renderLeaderboard();
+    };
+  });
   ["filterSearch", "filterTeam", "filterPos", "filterMin"].forEach((id) => {
     document.getElementById(id).oninput = () => {
       state.filters = {
